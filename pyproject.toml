@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "uhb"
+version = "0.1.0"
+description = "Universal Harness Benchmark — AI Developer Research Platform"
+requires-python = ">=3.10"
+dependencies = [
+    "anthropic>=0.30.0",
+    "openai>=1.0.0",
+    "pyyaml>=6.0",
+    "pydantic>=2.0",
+    "diskcache>=5.0",
+    "streamlit>=1.36",
+    "plotly>=5.0",
+    "pandas>=2.0",
+    "numpy>=1.26",
+    "pytest>=8.0",
+]
+
+[project.scripts]
+uhb = "uhb.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["uhb*"]

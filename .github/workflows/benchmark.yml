@@ -1,0 +1,97 @@
+name: 🧬 UHB Benchmark
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'Model to benchmark'
+        required: true
+        default: 'deepseek/chat'
+        type: choice
+        options:
+          - 'deepseek/chat'
+          - 'deepseek/reasoner'
+          - 'mock/strong'
+          - 'mock/medium'
+      seeds:
+        description: 'Seeds per task'
+        default: '3'
+        type: string
+      tasks:
+        description: 'Comma-separated task IDs (blank = all)'
+        default: ''
+        type: string
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout UHB
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install anthropic openai pyyaml pydantic diskcache
+
+      - name: Add UHB to PYTHONPATH
+        run: |
+          echo "PYTHONPATH=${{ github.workspace }}/uhb-core:${{ github.workspace }}/uhb-benchmark:${{ github.workspace }}/uhb-evolution:${{ github.workspace }}/uhb-compiler" >> $GITHUB_ENV
+
+      - name: Run UHB Benchmark
+        id: benchmark
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          MODEL="${{ inputs.model || 'deepseek/chat' }}"
+          SEEDS="${{ inputs.seeds || '3' }}"
+          TASKS_ARG=""
+          if [ -n "${{ inputs.tasks }}" ]; then
+            TASKS_ARG="--tasks ${{ inputs.tasks }}"
+          fi
+
+          echo "🧬 Running UHB Benchmark against $MODEL..."
+          python3 uhb benchmark "$MODEL" --seeds "$SEEDS" $TASKS_ARG --save 2>&1 | tee benchmark_output.txt
+
+      - name: Run Harness Search
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          MODEL="${{ inputs.model || 'deepseek/chat' }}"
+          echo "🔍 Running harness search for $MODEL..."
+          python3 uhb search "$MODEL" --method grid --num-configs 100 2>&1 | tee search_output.txt
+
+      - name: Compile Optimal Harness
+        run: |
+          # Find the most recent profile
+          PROFILE=$(ls -t data/results/*.json 2>/dev/null | head -1)
+          if [ -n "$PROFILE" ]; then
+            echo "⚙️ Compiling harness from $PROFILE..."
+            python3 uhb compile dummy --profile "$PROFILE" --format yaml --output harness_output.yaml 2>&1 | tee compile_output.txt
+          fi
+
+      - name: Upload Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: uhb-benchmark-results
+          path: |
+            benchmark_output.txt
+            search_output.txt
+            compile_output.txt
+            harness_output.yaml
+            data/results/
+
+      - name: Summary
+        run: |
+          echo "## 🧬 UHB Benchmark Results" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -40 benchmark_output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,8 @@
+.deekseek_env
+__pycache__/
+.pytest_cache/
+*.egg-info/
+data/cache/
+data/results/
+venv/
+*.tar.gz
